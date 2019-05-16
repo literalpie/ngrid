@@ -65,8 +65,9 @@ export class PblNgridColumnDef<T extends COLUMN = COLUMN> extends CdkColumnDef i
 
   isDragging = false;
 
+  table: PblNgridComponent<any>;
+
   protected _colDiffer: KeyValueDiffer<any, any>;
-  protected table: PblNgridComponent<any>;
 
   private _column: T;
   private _isDirty = false;
@@ -89,15 +90,6 @@ export class PblNgridColumnDef<T extends COLUMN = COLUMN> extends CdkColumnDef i
   constructor(protected readonly _differs: KeyValueDiffers, @Inject(EXT_API_TOKEN) protected extApi: PblNgridExtensionApi<any> ) {
     super();
     this.table = extApi.table;
-  }
-
-  /**
-   * Create a cell context for the current column at the provided row index, relative to the rendered rows (not the entire datasource).
-   */
-  createContext<Z = any>(renderRowIndex: number): CellContext<Z> {
-    if (isPblColumn(this.column)) {
-      return this.extApi.contextApi.createCellContext(renderRowIndex, this.column)
-    }
   }
 
   /**

@@ -2,7 +2,8 @@
 
 <docsi-mat-example-with-source title="Cell/Row -> Click Events" contentClass="table-height-300 mat-elevation-z7" [query]="[{section: 'ex-1'}]">
   <!--@pebula-example:ex-1-->
-  <pbl-ngrid blockUi [dataSource]="ds1" [columns]="columns"
+  <pbl-ngrid blockUi [dataSource]="ds1" [columns]="columns" identityProp="name"
+            focusMode="cell" (keyDown)="onKeyDown($event)"
             (cellClick)="onClickEvents($event)"
             (rowClick)="onClickEvents($event)"></pbl-ngrid>
   <!--@pebula-example:ex-1-->

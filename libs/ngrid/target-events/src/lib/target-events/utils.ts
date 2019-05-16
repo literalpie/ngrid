@@ -33,7 +33,7 @@ export function findParentCell(element: HTMLElement): HTMLElement | undefined {
 /**
  * Returns the position (index) of the cell (element) among it's siblings.
  */
-export function findCellIndex(cell: Element): number {
+export function findCellRenderIndex(cell: Element): number {
   let colIndex = 0;
   while (cell = cell.previousElementSibling) {
     colIndex++;

@@ -22,8 +22,8 @@ export interface PblNgridCellContext<T = any, P extends keyof PblColumnTypeDefin
   startEdit(markForCheck?: boolean): void;
   stopEdit(markForCheck?: boolean): void;
 
-  // selectRow(): void;
-  // selectCell(): void;
+  focus(state: boolean, markForCheck?: boolean): void;
+  select(state: boolean, markForCheck?: boolean): void;
 }
 
 export interface PblNgridRowContext<T = any> extends RowContext<T> {
@@ -94,8 +94,9 @@ export interface PblNgridContextApi<T = any> {
    * > You can transform data < -- > render index's using the data source.
    * @param rowIndex The RENDER index position of the row.
    */
-  getRow(rowIndex: number): PblNgridRowContext<T> | undefined;
+  getRow(rowIndex: number | HTMLElement): PblNgridRowContext<T> | undefined;
 
+  getCell(cell: HTMLElement): PblNgridCellContext | undefined
   /**
    * Get the cell context in the specific row index and column index
    * @param rowIndex The index position of the row.

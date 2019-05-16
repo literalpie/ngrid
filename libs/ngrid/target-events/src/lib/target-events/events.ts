@@ -14,6 +14,7 @@ export interface PblNgridMatrixRow<RType extends ROW_TYPE, RMetaType extends key
 }
 
 export interface PblNgridMatrixPoint<RType extends ROW_TYPE, RMetaType extends keyof ROW_META_TYPE = 'data'> extends PblNgridMatrixRow<RType, RMetaType> {
+  /** The RENDER column index */
   colIndex: number;
 }
 
@@ -31,9 +32,9 @@ export interface PblNgridDataMatrixPoint<T = any> extends PblNgridColumnMatrixPo
   context: PblNgridCellContext;
 }
 
-export type PblNgridCellEvent<T = any> = { source: MouseEvent; cellTarget: HTMLElement; rowTarget: HTMLElement; }
+export type PblNgridCellEvent<T = any> = { source: MouseEvent | KeyboardEvent; cellTarget: HTMLElement; rowTarget: HTMLElement; }
   & (PblNgridDataMatrixPoint<T> | PblNgridColumnMatrixPoint<'header' | 'footer'> | PblNgridColumnMatrixPoint<'header' | 'footer', 'meta'>  | PblNgridColumnMatrixPoint<'header' | 'footer', 'meta-group'>);
 
-export type PblNgridRowEvent<T = any> = { source: MouseEvent; rowTarget: HTMLElement; root?: PblNgridCellEvent<T>; }
+export type PblNgridRowEvent<T = any> = { source: MouseEvent | KeyboardEvent; rowTarget: HTMLElement; root?: PblNgridCellEvent<T>; }
   & (PblNgridDataMatrixRow<T> | PblNgridMatrixRow<'header' | 'footer'> | PblNgridMatrixRow<'header' | 'footer', 'meta'>  | PblNgridMatrixRow<'header' | 'footer', 'meta-group'>);
 

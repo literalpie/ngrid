@@ -13,6 +13,7 @@ import {
   ViewChild,
   NgZone,
   EmbeddedViewRef,
+  HostListener,
 } from '@angular/core';
 import { CdkHeaderCell, CdkCell, CdkFooterCell } from '@angular/cdk/table';
 
@@ -206,6 +207,18 @@ export class PblNgridCellDirective extends CdkCell implements DoCheck {
     if (this.columnDef.isDirty) {
       this.columnDef.applyWidth(this.el);
     }
+  }
+
+  @HostListener('focus')
+  focused(): void {
+    const context = this.columnDef.table.contextApi.getCell(this.el);
+    context.focus(true);
+  }
+
+  @HostListener('blur')
+  blured(): void {
+    const context = this.columnDef.table.contextApi.getCell(this.el);
+    context.focus(false);
   }
 }
 

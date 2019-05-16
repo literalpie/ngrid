@@ -1,8 +1,8 @@
 /* @pebula-example:ex-1 */
 /* @pebula-example:ex-2 */
 /* @pebula-example:ex-3 */
-import { map } from 'rxjs/operators';
 import { ChangeDetectionStrategy, Component, ViewEncapsulation } from '@angular/core';
+import { LEFT_ARROW, UP_ARROW, RIGHT_ARROW, DOWN_ARROW } from '@angular/cdk/keycodes';
 import { createDS, columnFactory } from '@pebula/ngrid';
 import { PblNgridRowEvent, PblNgridCellEvent } from '@pebula/ngrid/target-events';
 
@@ -72,7 +72,7 @@ export class TargetEventsGridExampleComponent {
   columns = COLUMNS;
   columns2 = COLUMNS2;
 
-  ds1 = createDS<Person>().onTrigger( () => this.datasource.getPeople(0, 15) ).create();
+  ds1 = createDS<Person>().onTrigger( () => this.datasource.getPeople(0, 500) ).create();
   ds2 = createDS<Person>().onTrigger( () => this.datasource.getPeople(0, 5) ).create();
 
   constructor(private datasource: DemoDataSource) { }
@@ -81,12 +81,36 @@ export class TargetEventsGridExampleComponent {
     let cellSuffix = '';
     if (isCellEvent(event)) {
       cellSuffix = `  CELL: ${event.colIndex}`;
+      event.cellTarget.focus();
     } else {
       if (event.root)  {
         cellSuffix = ` [Bubbled from CELL: ${event.root.colIndex}]`;
       }
     }
-    alert(`CLICK EVENT at ROW: ${event.rowIndex}${cellSuffix}\nType: ${event.type}\nSubType: ${event.subType}`);
+    // alert(`CLICK EVENT at ROW: ${event.rowIndex}${cellSuffix}\nType: ${event.type}\nSubType: ${event.subType}`);
+  }
+
+  onKeyDown(event: PblNgridRowEvent<Person> | PblNgridCellEvent<Person>) {
+    const source: KeyboardEvent = event.source as any;
+    if (isCellEvent(event)) {
+      const sourceCell = event.cellTarget;
+
+
+      switch (source.keyCode) {
+        case UP_ARROW:
+          this.focusCell(this.moveFocusVertically(sourceCell, -1));
+          break;
+        case DOWN_ARROW:
+          this.focusCell(this.moveFocusVertically(sourceCell, 1));
+          break;
+        case LEFT_ARROW:
+          this.focusCell(this.moveFocusHorizontally(sourceCell, -1));
+          break;
+        case RIGHT_ARROW:
+          this.focusCell(this.moveFocusHorizontally(sourceCell, 1));
+          break;
+      }
+    }
   }
 
   onEnterLeaveEvents(event: PblNgridRowEvent<Person> | PblNgridCellEvent<Person>, isEnter = false) {
@@ -107,6 +131,32 @@ export class TargetEventsGridExampleComponent {
       }
     }
   }
+
+  private focusCell(cell: HTMLElement): void {
+    if (cell) {
+      cell.focus();
+    }
+  }
+
+  private moveFocusVertically(currentCell: HTMLElement, offset: number): HTMLElement | undefined {
+    const currentRow = currentCell.closest('pbl-ngrid-row');
+    const rows = Array.from(currentRow.closest('pbl-ngrid').querySelectorAll('pbl-ngrid-row'));
+    const currentRowIndex = rows.indexOf(currentRow);
+    const currentIndexWithinRow = Array.from(currentRow.childNodes).indexOf(currentCell);
+    const newRowIndex = currentRowIndex + offset;
+
+    if (rows[newRowIndex]) {
+      return rows[newRowIndex].childNodes[currentIndexWithinRow] as HTMLElement;
+    }
+  }
+
+  private  moveFocusHorizontally(currentCell: HTMLElement, offset: number): HTMLElement | undefined {
+    const cells = Array.from(currentCell.closest('pbl-ngrid').querySelectorAll('pbl-ngrid-cell')) as HTMLElement[];
+    const currentIndex = cells.indexOf(currentCell);
+    const newIndex = currentIndex + offset;
+    return cells[newIndex];
+  }
+
 }
 /* @pebula-example:ex-3 */
 /* @pebula-example:ex-2 */

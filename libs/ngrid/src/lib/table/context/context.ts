@@ -7,6 +7,7 @@ import { PblNgridCellContext, PblNgridMetaCellContext, PblNgridRowContext  } fro
 import { PblColumn } from '../columns/column';
 import { PblMetaColumn } from '../columns/meta-column';
 import { ColumnApi } from '../column-api';
+import { findCellRenderedIndex, findRowRenderedIndex } from './utils';
 
 declare module '@angular/cdk/table/typings/row.d' {
   export interface CdkCellOutletRowContext<T> {
@@ -19,10 +20,13 @@ declare module '@angular/cdk/table/typings/row.d' {
 
 export interface CellContextState<T = any> {
   editing: boolean;
+  focused: boolean;
+  selected: boolean;
 }
 
 export interface RowContextState<T = any> {
   identity: any;
+  dataIndex: number;
   cells: CellContextState<T>[];
   firstRender: boolean;
 }
@@ -34,6 +38,8 @@ export class MetaCellContext<T, TCol extends PblMetaColumn | PblColumn = PblMeta
 }
 
 export class CellContext<T = any> implements PblNgridCellContext<T> {
+  private static ACTIVE_FOCUSED = new WeakMap<PblNgridComponent, { rowIdentity: any, colIndex: number }>();
+
   get $implicit(): CellContext<T> { return this; }
   get row(): T { return this.rowContext.$implicit; };
   get value(): any { return this.col.getValue(this.row); }
@@ -41,14 +47,18 @@ export class CellContext<T = any> implements PblNgridCellContext<T> {
 
   get rowContext(): PblNgridRowContext<T> { return this._rowContext; }
   get editing(): boolean { return this._editing; }
+  get focused(): boolean { return this._focused; }
+  get selected(): boolean { return this._selected; }
 
   readonly index: number;
 
   private _rowContext: PblNgridRowContext<T>;
   private _editing = false;
+  private _focused = false;
+  private _selected = false;
 
   constructor(rowContext: PblNgridRowContext<T>, public col: PblColumn, public table: PblNgridComponent<any>) {
-    this.index = table.columnApi.visibleColumns.indexOf(col);
+    this.index = table.columnApi.indexOf(col);
     this._rowContext = rowContext;
   }
 
@@ -57,13 +67,16 @@ export class CellContext<T = any> implements PblNgridCellContext<T> {
 
     cellContext._rowContext = rowContext;
     cellContext._editing = state.editing;
+    cellContext._focused = state.focused;
+    cellContext._selected = state.selected;
+
     if (requiresReset) {
       PblRowContext.updateCell(rowContext, cellContext);
     }
   }
 
   static defaultState<T = any>(): CellContextState<T> {
-    return { editing: false };
+    return { editing: false, focused: false, selected: false };
   }
 
   clone(): CellContext<T> {
@@ -75,6 +88,8 @@ export class CellContext<T = any> implements PblNgridCellContext<T> {
   getState(): CellContextState<T> {
     return {
       editing: this._editing,
+      focused: this._focused,
+      selected: this._selected,
     };
   }
 
@@ -97,6 +112,42 @@ export class CellContext<T = any> implements PblNgridCellContext<T> {
       }
     }
   }
+
+  focus(state: boolean, markForCheck?: boolean): void {
+    if (state !== this._focused && !this.table.viewport.isScrolling) {
+      this._focused = state;
+
+      const activeFocused = CellContext.ACTIVE_FOCUSED.get(this.table);
+      const isSelfState = activeFocused
+        ? activeFocused.rowIdentity === this.rowContext.identity
+        : null
+      ;
+
+      if (!state && isSelfState) {
+        CellContext.ACTIVE_FOCUSED.delete(this.table);
+      } else {
+        if (isSelfState === false) {
+          const extApi: PblNgridExtensionApi = this.rowContext['extApi'];
+          extApi.contextApi.updateCache(activeFocused.rowIdentity, activeFocused.colIndex, { focused: false });
+        }
+        CellContext.ACTIVE_FOCUSED.set(this.table, { rowIdentity: this.rowContext.identity, colIndex: this.index });
+      }
+
+      if (markForCheck) {
+        this.table._cdkTable.syncRows('data', this.rowContext.index);
+      }
+    }
+  }
+
+  select(state: boolean, markForCheck?: boolean): void {
+    if (state !== this._selected && !this.table.viewport.isScrolling) {
+      this._selected = state;
+      PblRowContext.updateCell(this.rowContext as PblRowContext<T>, this);
+      if (markForCheck) {
+        this.table._cdkTable.syncRows('data', this.rowContext.index);
+      }
+    }
+  }
 }
 
 export class PblRowContext<T> implements PblNgridRowContext<T> {
@@ -104,8 +155,6 @@ export class PblRowContext<T> implements PblNgridRowContext<T> {
   $implicit?: T;
   /** Index of the data object in the provided data array. */
   index?: number;
-  /** Index of the data object in the provided data array. */
-  dataIndex?: number;
   /** Index location of the rendered row that this cell is located within. */
   renderIndex?: number;
   /** Length of the number of total rows. */
@@ -135,7 +184,7 @@ export class PblRowContext<T> implements PblNgridRowContext<T> {
 
   private cells: CellContext<T>[];
 
-  constructor(public identity: any, private extApi: PblNgridExtensionApi<T>) {
+  constructor(public identity: any, public dataIndex: number, private extApi: PblNgridExtensionApi<T>) {
     /*  TODO: material2#14198
         The row context come from the `cdk` and it can be of 2 types, depending if multiple row templates are used or not.
         `index` is used for single row template mode and `renderIndex` for multi row template mode.
@@ -178,33 +227,41 @@ export class PblRowContext<T> implements PblNgridRowContext<T> {
   static fromState<T>(rowContext: PblRowContext<T>, state: RowContextState<T>): void {
     rowContext.identity = state.identity;
     rowContext.firstRender = state.firstRender;
+    rowContext.dataIndex = state.dataIndex;
     for (let i = 0, len = rowContext.cells.length; i < len; i++) {
       CellContext.fromState<T>(rowContext, state.cells[i], rowContext.cells[i]);
     }
   }
 
-  static defaultState<T = any>(identity: number, cellsCount: number): RowContextState<T> {
+  static defaultState<T = any>(identity: any, dataIndex: number, cellsCount: number): RowContextState<T> {
     const cells: CellContextState<T>[] = [];
     for (let i = 0; i < cellsCount; i++) {
       cells.push(CellContext.defaultState());
     }
-    return { identity, cells, firstRender: true };
+    return { identity, dataIndex, cells, firstRender: true };
   }
 
   getState(): RowContextState<T> {
     return {
       identity: this.identity,
+      dataIndex: this.dataIndex,
       firstRender: this.firstRender,
       cells: this.cells.map( c => c.getState() ),
     };
   }
 
   updateContext(context: RowContext<T>): void {
+    context.dataIndex = this.dataIndex;
     Object.assign(this, context);
   }
 
-  cell(index: number): CellContext<T> | undefined {
-    return this.cells[index];
+  /**
+   * Returns the cell context for the column at the specified position.
+   * > The position is relative to ALL columns (NOT RENDERED COLUMNS)
+   */
+  cell(index: number | PblColumn): CellContext<T> | undefined {
+    const idx = typeof index === 'number' ? index : this.table.columnApi.indexOf(index);
+    return this.cells[idx];
   }
 
   getCells(): CellContext<T>[] {
@@ -221,7 +278,7 @@ export class PblRowContext<T> implements PblNgridRowContext<T> {
 
 export class ContextApi<T = any> {
   private viewCache = new Map<number, PblRowContext<T>>();
-  private cache = new Map<number, RowContextState<T>>();
+  private cache = new Map<any, RowContextState<T>>();
   private vcRef: ViewContainerRef;
   private columnApi: ColumnApi<T>;
 
@@ -344,25 +401,38 @@ export class ContextApi<T = any> {
     this.cache.clear();
   }
 
-  getRow(row: number): PblNgridRowContext<T> | undefined {
-    return this.rowContext(row);
+  getRow(row: number | HTMLElement): PblNgridRowContext<T> | undefined {
+    const index = typeof row === 'number' ? row : findRowRenderedIndex(row);
+    return this.rowContext(index);
   }
 
+  getCell(cell: HTMLElement): PblNgridCellContext | undefined
   /**
    * Return the cell context for the cell at the point specified
    * @param row
    * @param col
    */
-  getCell(row: number, col: number): PblNgridCellContext | undefined {
-    const rowContext = this.rowContext(row);
-    if (rowContext) {
-      return rowContext.cell(col);
+  getCell(row: number, col: number): PblNgridCellContext | undefined;
+  getCell(rowOrCellElement: number | HTMLElement, col?: number): PblNgridCellContext | undefined {
+    if (typeof rowOrCellElement === 'number') {
+      const rowContext = this.rowContext(rowOrCellElement);
+      if (rowContext) {
+        return rowContext.cell(col);
+      }
+    } else {
+      const [ r, c ] = findCellRenderedIndex(rowOrCellElement);
+      const column = this.extApi.table.columnApi.findColumnAt(c);
+      const columnIndex = this.extApi.table.columnApi.indexOf(column);
+      const rowContext = this.rowContext(r);
+      if (rowContext) {
+        return rowContext.cell(columnIndex);
+      }
     }
   }
 
   createCellContext(renderRowIndex: number, column: PblColumn): CellContext<T> {
     const rowContext = this.rowContext(renderRowIndex);
-    const colIndex = this.columnApi.visibleColumns.indexOf(column);
+    const colIndex = this.columnApi.indexOf(column);
     return rowContext.cell(colIndex);
   }
 
@@ -374,6 +444,22 @@ export class ContextApi<T = any> {
     const viewPortRect = this.getViewRect();
     const viewRef = this.findViewRef(rowContext.index);
     processOutOfView(viewRef, viewPortRect);
+  }
+
+  updateCache(rowIdentity: any, columnIndex: number, cellState: Partial<CellContextState<T>>): void;
+  updateCache(rowIdentity: any, rowState: Partial<RowContextState<T>>): void;
+  updateCache(rowIdentity: any, rowStateOrCellIndex: Partial<RowContextState<T>> | number, cellState?: Partial<CellContextState<T>>): void {
+    const currentRowState = this.cache.get(rowIdentity);
+    if (currentRowState) {
+      if (typeof rowStateOrCellIndex === 'number') {
+        const currentCellState = currentRowState.cells[rowStateOrCellIndex];
+        if (currentCellState) {
+          Object.assign(currentCellState, cellState);
+        }
+      } else {
+        Object.assign(currentRowState, rowStateOrCellIndex);
+      }
+    }
   }
 
   private findViewRef(index: number): EmbeddedViewRef<RowContext<T>> {
@@ -402,18 +488,20 @@ export class ContextApi<T = any> {
    */
   private findRowContext(viewRef: EmbeddedViewRef<RowContext<T>>, renderRowIndex: number): PblRowContext<T> | undefined {
     const { context } = viewRef;
+    const dataIndex = this.extApi.table.ds.renderStart + renderRowIndex;
     const identity = this.extApi.table.identityProp
       ? viewRef.context.$implicit[this.extApi.table.identityProp]
-      : this.extApi.table.ds.renderStart + renderRowIndex
+      : dataIndex
     ;
+
     let rowContext: PblRowContext<T> = context.pblRowContext as PblRowContext<T>;
 
     if (!this.cache.has(identity)) {
-      this.cache.set(identity, PblRowContext.defaultState(identity, this.columnApi.columns.length));
+      this.cache.set(identity, PblRowContext.defaultState(identity, dataIndex, this.columnApi.columns.length));
     }
 
     if (!rowContext) {
-      rowContext = context.pblRowContext = this.createRowContext(identity, context);
+      rowContext = context.pblRowContext = this.createRowContext(identity, dataIndex, context);
       viewRef.onDestroy(() => {
         this.viewCache.delete(renderRowIndex);
         delete context.pblRowContext;
@@ -424,7 +512,7 @@ export class ContextApi<T = any> {
       rowContext.updateContext(context);
 
       // We
-      const gap = identity - rowContext.identity;
+      const gap = dataIndex - rowContext.dataIndex;
       if (gap > 0) {
         const siblingViewRef = this.findViewRef(renderRowIndex + gap);
         const siblingRowContext = siblingViewRef && siblingViewRef.context.pblRowContext as PblRowContext<T>;
@@ -440,8 +528,8 @@ export class ContextApi<T = any> {
     return rowContext;
   }
 
-  private createRowContext(identity: number, context: RowContext<T>): PblRowContext<T> {
-    const rowContext = new PblRowContext<T>(identity, this.extApi);
+  private createRowContext(identity: any, dataIndex: number, context: RowContext<T>): PblRowContext<T> {
+    const rowContext = new PblRowContext<T>(identity, dataIndex, this.extApi);
 
     rowContext.updateContext(context);
     return rowContext;
