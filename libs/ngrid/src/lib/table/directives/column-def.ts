@@ -13,7 +13,6 @@ import { CdkColumnDef } from '@angular/cdk/table';
 
 import { COLUMN } from '../columns';
 import { isPblColumn } from '../columns/column';
-import { CellContext } from '../context/index';
 import { PblNgridComponent } from '../table.component';
 import { EXT_API_TOKEN, PblNgridExtensionApi } from '../../ext/table-ext-api';
 import { parseStyleWidth } from '../columns/utils';

@@ -211,14 +211,12 @@ export class PblNgridCellDirective extends CdkCell implements DoCheck {
 
   @HostListener('focus')
   focused(): void {
-    const context = this.columnDef.table.contextApi.getCell(this.el);
-    context.focus(true);
+    this.columnDef.table.contextApi.focusCell(this.el, true);
   }
 
   @HostListener('blur')
   blured(): void {
-    const context = this.columnDef.table.contextApi.getCell(this.el);
-    context.focus(false);
+    this.columnDef.table.contextApi.focusCell();
   }
 }
 

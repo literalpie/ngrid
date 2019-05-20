@@ -45,6 +45,7 @@ export {
 
   PblNgridCellClickEvent,
   PblNgridMetaCellContext, PblNgridCellContext, PblNgridRowContext, PblRowContext, PblNgridContextApi,
+  CellReference, GridDataPoint,
 } from './lib/table/index';
 
 export {

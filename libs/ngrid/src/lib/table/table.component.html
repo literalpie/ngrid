@@ -57,6 +57,7 @@
         <!-- RECORD CELL DEF -->
         <pbl-ngrid-cell *cdkCellDef="let row; pblRowContext as pblRowContext"
                         [class.pbl-ngrid-cell-focused]="pblRowContext && pblRowContext.cell(c).focused"
+                        [class.pbl-ngrid-cell-selected]="pblRowContext && pblRowContext.cell(c).selected"
                         [attr.tabindex]="cellFocus" [attr.id]="c.id">
           <ng-container *ngIf="pblRowContext && pblRowContext.cell(c) as ctx">
             <ng-container *ngTemplateOutlet="ctx.editing ? ctx.col.editorTpl : ctx.col.cellTpl; context: ctx"></ng-container>

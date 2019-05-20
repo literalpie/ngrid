@@ -7,6 +7,16 @@ import { PblNgridComponent, PblNgridPluginController, TablePlugin } from '@pebul
 
 import * as Events from './events';
 import { matrixRowFromRow, isRowContainer, findCellRenderIndex, findParentCell } from './utils';
+import { handleFocusAndSelection } from './focus-and-selection';
+
+declare module '@pebula/ngrid/lib/table/services/config' {
+  interface PblNgridConfig {
+    targetEvents?: {
+      /** When set to true will enable the target events plugin on all table instances by default. */
+      autoEnable?: boolean;
+    };
+  }
+}
 
 declare module '@pebula/ngrid/lib/ext/types' {
   interface PblNgridPluginExtension {
@@ -17,7 +27,7 @@ declare module '@pebula/ngrid/lib/ext/types' {
   }
 }
 
-const PLUGIN_KEY: 'targetEvents' = 'targetEvents';
+export const PLUGIN_KEY: 'targetEvents' = 'targetEvents';
 
 function hasListeners(source: { observers: Observer<any>[] }): boolean {
   return source.observers.length > 0;
@@ -50,7 +60,7 @@ export class PblNgridTargetEventsPlugin<T = any> {
   private _removePlugin: (table: PblNgridComponent<any>) => void;
   protected readonly destroyed = new ReplaySubject<void>();
 
-  constructor(protected table: PblNgridComponent<any>, protected injector: Injector, protected pluginCtrl: PblNgridPluginController) {
+  constructor(public table: PblNgridComponent<any>, protected injector: Injector, protected pluginCtrl: PblNgridPluginController) {
     this._removePlugin = pluginCtrl.setPlugin(PLUGIN_KEY, this);
     this.cdr = injector.get(ChangeDetectorRef);
     if (table.isInit) {
@@ -74,6 +84,7 @@ export class PblNgridTargetEventsPlugin<T = any> {
 
   private init(): void {
     this.setupDomEvents();
+    handleFocusAndSelection(this);
   }
 
   private setupDomEvents(): void {

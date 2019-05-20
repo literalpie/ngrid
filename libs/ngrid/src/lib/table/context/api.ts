@@ -2,285 +2,29 @@ import { ViewContainerRef, EmbeddedViewRef } from '@angular/core';
 import { RowContext } from '@angular/cdk/table';
 
 import { PblNgridExtensionApi } from '../../ext/table-ext-api';
-import { PblNgridComponent } from '../table.component';
-import { PblNgridCellContext, PblNgridMetaCellContext, PblNgridRowContext  } from './types';
+import { RowContextState, CellContextState, PblNgridCellContext, PblNgridRowContext, CellReference, GridDataPoint } from './types';
 import { PblColumn } from '../columns/column';
-import { PblMetaColumn } from '../columns/meta-column';
 import { ColumnApi } from '../column-api';
-import { findCellRenderedIndex, findRowRenderedIndex } from './utils';
-
-declare module '@angular/cdk/table/typings/row.d' {
-  export interface CdkCellOutletRowContext<T> {
-    pblRowContext: PblNgridRowContext<T>;
-  }
-  export interface CdkCellOutletMultiRowContext<T> {
-    pblRowContext: PblNgridRowContext<T>;
-  }
-}
-
-export interface CellContextState<T = any> {
-  editing: boolean;
-  focused: boolean;
-  selected: boolean;
-}
-
-export interface RowContextState<T = any> {
-  identity: any;
-  dataIndex: number;
-  cells: CellContextState<T>[];
-  firstRender: boolean;
-}
-
-export class MetaCellContext<T, TCol extends PblMetaColumn | PblColumn = PblMetaColumn> implements PblNgridMetaCellContext<T, TCol> {
-  get $implicit(): MetaCellContext<T, TCol> { return this; }
-
-  constructor(public col: TCol, public table: PblNgridComponent<any>) {}
-}
-
-export class CellContext<T = any> implements PblNgridCellContext<T> {
-  private static ACTIVE_FOCUSED = new WeakMap<PblNgridComponent, { rowIdentity: any, colIndex: number }>();
-
-  get $implicit(): CellContext<T> { return this; }
-  get row(): T { return this.rowContext.$implicit; };
-  get value(): any { return this.col.getValue(this.row); }
-  set value(v: any) { this.col.setValue(this.row, v); }
-
-  get rowContext(): PblNgridRowContext<T> { return this._rowContext; }
-  get editing(): boolean { return this._editing; }
-  get focused(): boolean { return this._focused; }
-  get selected(): boolean { return this._selected; }
-
-  readonly index: number;
-
-  private _rowContext: PblNgridRowContext<T>;
-  private _editing = false;
-  private _focused = false;
-  private _selected = false;
-
-  constructor(rowContext: PblNgridRowContext<T>, public col: PblColumn, public table: PblNgridComponent<any>) {
-    this.index = table.columnApi.indexOf(col);
-    this._rowContext = rowContext;
-  }
-
-  static fromState<T>(rowContext: PblRowContext<T>, state: CellContextState<T>, cellContext: CellContext<T>, skipRowUpdate?: boolean): void {
-    const requiresReset = !skipRowUpdate && cellContext._editing === state.editing;
-
-    cellContext._rowContext = rowContext;
-    cellContext._editing = state.editing;
-    cellContext._focused = state.focused;
-    cellContext._selected = state.selected;
-
-    if (requiresReset) {
-      PblRowContext.updateCell(rowContext, cellContext);
-    }
-  }
-
-  static defaultState<T = any>(): CellContextState<T> {
-    return { editing: false, focused: false, selected: false };
-  }
-
-  clone(): CellContext<T> {
-    const ctx = new CellContext<T>(this._rowContext, this.col, this.table);
-    CellContext.fromState(this._rowContext as PblRowContext<T>, this.getState(), ctx, true);
-    return ctx;
-  }
-
-  getState(): CellContextState<T> {
-    return {
-      editing: this._editing,
-      focused: this._focused,
-      selected: this._selected,
-    };
-  }
-
-  startEdit(markForCheck?: boolean): void {
-    if (this.col.editorTpl && !this.editing) {
-      this._editing = true;
-      PblRowContext.updateCell(this.rowContext as PblRowContext<T>, this);
-      if (markForCheck) {
-        this.table._cdkTable.syncRows('data', true, this.rowContext.index);
-      }
-    }
-  }
-
-  stopEdit(markForCheck?: boolean): void {
-    if (this.editing && !this.table.viewport.isScrolling) {
-      this._editing = false;
-      PblRowContext.updateCell(this.rowContext as PblRowContext<T>, this);
-      if (markForCheck) {
-        this.table._cdkTable.syncRows('data', this.rowContext.index);
-      }
-    }
-  }
-
-  focus(state: boolean, markForCheck?: boolean): void {
-    if (state !== this._focused && !this.table.viewport.isScrolling) {
-      this._focused = state;
-
-      const activeFocused = CellContext.ACTIVE_FOCUSED.get(this.table);
-      const isSelfState = activeFocused
-        ? activeFocused.rowIdentity === this.rowContext.identity
-        : null
-      ;
-
-      if (!state && isSelfState) {
-        CellContext.ACTIVE_FOCUSED.delete(this.table);
-      } else {
-        if (isSelfState === false) {
-          const extApi: PblNgridExtensionApi = this.rowContext['extApi'];
-          extApi.contextApi.updateCache(activeFocused.rowIdentity, activeFocused.colIndex, { focused: false });
-        }
-        CellContext.ACTIVE_FOCUSED.set(this.table, { rowIdentity: this.rowContext.identity, colIndex: this.index });
-      }
-
-      if (markForCheck) {
-        this.table._cdkTable.syncRows('data', this.rowContext.index);
-      }
-    }
-  }
-
-  select(state: boolean, markForCheck?: boolean): void {
-    if (state !== this._selected && !this.table.viewport.isScrolling) {
-      this._selected = state;
-      PblRowContext.updateCell(this.rowContext as PblRowContext<T>, this);
-      if (markForCheck) {
-        this.table._cdkTable.syncRows('data', this.rowContext.index);
-      }
-    }
-  }
-}
-
-export class PblRowContext<T> implements PblNgridRowContext<T> {
-  /** Data for the row that this cell is located within. */
-  $implicit?: T;
-  /** Index of the data object in the provided data array. */
-  index?: number;
-  /** Index location of the rendered row that this cell is located within. */
-  renderIndex?: number;
-  /** Length of the number of total rows. */
-  count?: number;
-  /** True if this cell is contained in the first row. */
-  first?: boolean;
-  /** True if this cell is contained in the last row. */
-  last?: boolean;
-  /** True if this cell is contained in a row with an even-numbered index. */
-  even?: boolean;
-  /** True if this cell is contained in a row with an odd-numbered index. */
-  odd?: boolean;
-
-  firstRender: boolean;
-  outOfView: boolean;
-  readonly table: PblNgridComponent<T>;
-
-  /**
-   * Returns the length of cells context stored in this row
-   */
-  get length(): number {
-    return (this.cells && this.cells.length) || 0;
-  }
-
-  get pblRowContext(): PblNgridRowContext<T> { return this; }
-  set pblRowContext(value: PblNgridRowContext<T>) { }
-
-  private cells: CellContext<T>[];
-
-  constructor(public identity: any, public dataIndex: number, private extApi: PblNgridExtensionApi<T>) {
-    /*  TODO: material2#14198
-        The row context come from the `cdk` and it can be of 2 types, depending if multiple row templates are used or not.
-        `index` is used for single row template mode and `renderIndex` for multi row template mode.
-
-        There library and/or plugins require access to the rendered index and having 2 locations is a problem...
-        It's a bug trap, adding more complexity and some time access issue because the `CdkTable` instance is not always available.
-
-        This is a workaround for have a single location for the rendered index.
-        I chose to `index` as the single location although `renderIndex` will probably be chosen by the material team.
-        This is because it's less likely to occur as most tables does not have multi row templates (detail row)
-        A refactor will have to be done in the future.
-        There is a pending issue to do so in https://github.com/angular/material2/issues/14198
-        Also related: https://github.com/angular/material2/issues/14199
-    */
-    const applyWorkaround = extApi.cdkTable.multiTemplateDataRows;
-    if (applyWorkaround) {
-      Object.defineProperty(this, 'index', { get: function() { return this.renderIndex; } });
-    }
-
-    this.table = extApi.table;
-
-    const cells = this.cells = [];
-    const { columns } = extApi.table.columnApi;
-    const len = columns.length;
-
-    for (let columnIndex = 0; columnIndex < len; columnIndex++) {
-      const cellContext = new CellContext<T>(this, columns[columnIndex], extApi.table);
-      cells.push(cellContext);
-    }
-  }
-
-  static updateCell<T>(rowContext: PblRowContext<T>, cell: CellContext<T>): boolean {
-    // if (rowContext.cells[cell.index] === cell) {
-      rowContext.cells[cell.index] = cell.clone();
-      return true;
-    // }
-    // return false;
-  }
-
-  static fromState<T>(rowContext: PblRowContext<T>, state: RowContextState<T>): void {
-    rowContext.identity = state.identity;
-    rowContext.firstRender = state.firstRender;
-    rowContext.dataIndex = state.dataIndex;
-    for (let i = 0, len = rowContext.cells.length; i < len; i++) {
-      CellContext.fromState<T>(rowContext, state.cells[i], rowContext.cells[i]);
-    }
-  }
-
-  static defaultState<T = any>(identity: any, dataIndex: number, cellsCount: number): RowContextState<T> {
-    const cells: CellContextState<T>[] = [];
-    for (let i = 0; i < cellsCount; i++) {
-      cells.push(CellContext.defaultState());
-    }
-    return { identity, dataIndex, cells, firstRender: true };
-  }
-
-  getState(): RowContextState<T> {
-    return {
-      identity: this.identity,
-      dataIndex: this.dataIndex,
-      firstRender: this.firstRender,
-      cells: this.cells.map( c => c.getState() ),
-    };
-  }
-
-  updateContext(context: RowContext<T>): void {
-    context.dataIndex = this.dataIndex;
-    Object.assign(this, context);
-  }
-
-  /**
-   * Returns the cell context for the column at the specified position.
-   * > The position is relative to ALL columns (NOT RENDERED COLUMNS)
-   */
-  cell(index: number | PblColumn): CellContext<T> | undefined {
-    const idx = typeof index === 'number' ? index : this.table.columnApi.indexOf(index);
-    return this.cells[idx];
-  }
-
-  getCells(): CellContext<T>[] {
-    return (this.cells && this.cells.slice()) || [];
-  }
-
-    /**
-   * Updates the `outOfView` property.
-   */
-  updateOutOfViewState(): void {
-    this.extApi.contextApi.updateOutOfViewState(this);
-  }
-}
+import { findCellRenderedIndex, findRowRenderedIndex, resolveCellReference } from './utils';
+import { PblRowContext } from './row';
+import { PblCellContext } from './cell';
 
 export class ContextApi<T = any> {
   private viewCache = new Map<number, PblRowContext<T>>();
   private cache = new Map<any, RowContextState<T>>();
   private vcRef: ViewContainerRef;
   private columnApi: ColumnApi<T>;
+
+  private activeFocused: GridDataPoint;
+  private activeSelected: GridDataPoint[];
+
+  get focusedCell(): GridDataPoint | undefined {
+    return this.activeFocused ? {...this.activeFocused } : undefined;
+  }
+
+  get selectedCell(): GridDataPoint[] {
+    return this.activeSelected ? this.activeSelected.slice() : [];
+  }
 
   constructor(private extApi: PblNgridExtensionApi<T>) {
     this.vcRef = extApi.cdkTable._rowOutlet.viewContainer;
@@ -365,14 +109,14 @@ export class ContextApi<T = any> {
             const state = from.getState();
             state.identity = to.identity;
             this.cache.set(to.identity, state);
-            PblRowContext.fromState(to, state);
+            to.fromState(state);
             to.$implicit = from.$implicit;
           }
 
           const to = this.viewCache.get(lastOp.pair[0]);
           lastOp.state.identity = to.identity;
           this.cache.set(to.identity, lastOp.state);
-          PblRowContext.fromState(to, lastOp.state);
+          to.fromState(lastOp.state);
           to.$implicit = lastOp.data;
         }
       }
@@ -390,6 +134,107 @@ export class ContextApi<T = any> {
 
     updateContext();
     extApi.cdkTable.onRenderRows.subscribe(updateContext);
+  }
+
+  /**
+   * Focus the provided cell.
+   * If a cell is not provided will un-focus (blur) the currently focused cell (if there is one).
+   * @param cellRef A Reference to the cell
+   * @param markForCheck Mark the row for change detection
+   */
+  focusCell(cellRef?: CellReference | boolean, markForCheck?: boolean): void {
+    if (!cellRef || cellRef === true) {
+      if (this.activeFocused) {
+        const { rowIdent, colIndex } = this.activeFocused;
+        this.activeFocused = undefined;
+        this.updateState(rowIdent, colIndex, { focused: false });
+
+        if (markForCheck) {
+          const rowContext = this.findRowInView(rowIdent);
+          if (rowContext) {
+            this.extApi.table._cdkTable.syncRows('data', rowContext.index);
+          }
+        }
+      }
+    } else {
+      const ref = resolveCellReference(cellRef, this as any);
+      if (ref) {
+        this.focusCell();
+        if (ref instanceof PblCellContext) {
+          if (!ref.focused && !this.extApi.table.viewport.isScrolling) {
+            this.updateState(ref.rowContext.identity, ref.index, { focused: true });
+
+            this.activeFocused = { rowIdent: ref.rowContext.identity, colIndex: ref.index };
+
+            this.selectCells();
+            this.selectCells( [ this.activeFocused ], markForCheck);
+
+            if (markForCheck) {
+              this.extApi.table._cdkTable.syncRows('data', ref.rowContext.index);
+            }
+          }
+        } else {
+          this.updateState(ref[0].identity, ref[1], { focused: true });
+          this.activeFocused = { rowIdent: ref[0].identity, colIndex: ref[1] };
+        }
+      }
+    }
+  }
+
+  /**
+   * Select all provided cells.
+   * If cells are not provided will un-select all currently selected cells.
+   * @param cellRef A Reference to the cell
+   * @param markForCheck Mark the row for change detection
+   */
+  selectCells(cellRefs?: CellReference[] | boolean, markForCheck?: boolean): void {
+    const toMarkRendered: number[] = [];
+
+    if (!cellRefs || cellRefs === true) {
+      if (this.activeSelected) {
+        const activeSelected = this.activeSelected;
+        this.activeSelected = undefined;
+
+        for (const { rowIdent, colIndex } of activeSelected) {
+          this.updateState(rowIdent, colIndex, { selected: false });
+
+          if (cellRefs) {
+            const rowContext = this.findRowInView(rowIdent);
+            if (rowContext) {
+              toMarkRendered.push(rowContext.index);
+            }
+          }
+        }
+      }
+    } else {
+      if (!this.activeSelected) {
+        this.activeSelected = [];
+      }
+
+      for (const cellRef of cellRefs) {
+        const ref = resolveCellReference(cellRef, this as any);
+        if (ref instanceof PblCellContext) {
+          if (!ref.selected && !this.extApi.table.viewport.isScrolling) {
+            this.updateState(ref.rowContext.identity, ref.index, { selected: true });
+
+            this.activeSelected.push( { rowIdent: ref.rowContext.identity, colIndex: ref.index } );
+
+            if (markForCheck) {
+              toMarkRendered.push(ref.index);
+            }
+          }
+        } else if (ref) {
+          const [ rowState, colIndex ] = ref;
+          if (!rowState.cells[colIndex].selected) {
+            this.updateState(rowState.identity, colIndex, { selected: true });
+            this.activeSelected.push( { rowIdent: rowState.identity, colIndex } );
+          }
+        }
+      }
+    }
+    if (toMarkRendered.length > 0) {
+      this.extApi.table._cdkTable.syncRows('data', ...toMarkRendered);
+    }
   }
 
   clear(): void {
@@ -430,7 +275,7 @@ export class ContextApi<T = any> {
     }
   }
 
-  createCellContext(renderRowIndex: number, column: PblColumn): CellContext<T> {
+  createCellContext(renderRowIndex: number, column: PblColumn): PblCellContext<T> {
     const rowContext = this.rowContext(renderRowIndex);
     const colIndex = this.columnApi.indexOf(column);
     return rowContext.cell(colIndex);
@@ -446,9 +291,9 @@ export class ContextApi<T = any> {
     processOutOfView(viewRef, viewPortRect);
   }
 
-  updateCache(rowIdentity: any, columnIndex: number, cellState: Partial<CellContextState<T>>): void;
-  updateCache(rowIdentity: any, rowState: Partial<RowContextState<T>>): void;
-  updateCache(rowIdentity: any, rowStateOrCellIndex: Partial<RowContextState<T>> | number, cellState?: Partial<CellContextState<T>>): void {
+  updateState(rowIdentity: any, columnIndex: number, cellState: Partial<CellContextState<T>>): void;
+  updateState(rowIdentity: any, rowState: Partial<RowContextState<T>>): void;
+  updateState(rowIdentity: any, rowStateOrCellIndex: Partial<RowContextState<T>> | number, cellState?: Partial<CellContextState<T>>): void {
     const currentRowState = this.cache.get(rowIdentity);
     if (currentRowState) {
       if (typeof rowStateOrCellIndex === 'number') {
@@ -458,6 +303,65 @@ export class ContextApi<T = any> {
         }
       } else {
         Object.assign(currentRowState, rowStateOrCellIndex);
+      }
+      const rowContext = this.findRowInView(rowIdentity);
+      if (rowContext) {
+        rowContext.fromState(currentRowState);
+      }
+    }
+  }
+
+  /**
+   * Try to find a specific row, using the row identity, in the current view.
+   * If the row is not in the view (or even not in the cache) it will return undefined, otherwise returns the row's context instance (`PblRowContext`)
+   * @param rowIdentity The row's identity. If a specific identity is used, please provide it otherwise provide the index of the row in the datasource.
+   */
+  findRowInView(rowIdentity: any): PblRowContext<T> | undefined {
+    const rowState = this.cache.get(rowIdentity);
+    if (rowState) {
+      const renderRowIndex = rowState.dataIndex - this.extApi.table.ds.renderStart;
+      const rowContext = this.viewCache.get(renderRowIndex);
+      if (rowContext && rowContext.identity === rowIdentity) {
+        return rowContext;
+      }
+    }
+  }
+
+  /**
+   * Try to find a specific row context, using the row identity, in the context cache.
+   * Note that the cache does not hold the context itself but only the state that can later be used to retrieve a context instance. The context instance
+   * is only used as context for rows in view.
+   * @param rowIdentity The row's identity. If a specific identity is used, please provide it otherwise provide the index of the row in the datasource.
+   */
+  findRowInCache(rowIdentity: any): RowContextState<T> | undefined;
+  /**
+   * Try to find a specific row context, using the row identity, in the context cache.
+   * Note that the cache does not hold the context itself but only the state that can later be used to retrieve a context instance. The context instance
+   * is only used as context for rows in view.
+   * @param rowIdentity The row's identity. If a specific identity is used, please provide it otherwise provide the index of the row in the datasource.
+   * @param offset When set, returns the row at the offset from the row with the provided row identity. Can be any numeric value (e.g 5, -6, 4).
+   * @param create Whether to create a new state if the current state does not exist.
+   */
+  findRowInCache(rowIdentity: any, offset: number, create: boolean): RowContextState<T> | undefined;
+  findRowInCache(rowIdentity: any, offset?: number, create?: boolean): RowContextState<T> | undefined {
+    const rowState = this.cache.get(rowIdentity);
+
+    if (!offset) {
+      return rowState;
+    } else {
+      const dataIndex = rowState.dataIndex + offset;
+      const item = this.extApi.table.ds.source[dataIndex];
+      if (item) {
+        const identity = this.extApi.table.identityProp
+          ? item[this.extApi.table.identityProp]
+          : dataIndex
+        ;
+        let result = this.findRowInCache(identity);
+        if (!result && create && dataIndex < this.extApi.table.ds.length) {
+          result = PblRowContext.defaultState(identity, dataIndex, this.columnApi.columns.length);
+          this.cache.set(identity, result);
+        }
+        return result;
       }
     }
   }
@@ -494,7 +398,7 @@ export class ContextApi<T = any> {
       : dataIndex
     ;
 
-    let rowContext: PblRowContext<T> = context.pblRowContext as PblRowContext<T>;
+    let rowContext = context.pblRowContext as PblRowContext<T>;
 
     if (!this.cache.has(identity)) {
       this.cache.set(identity, PblRowContext.defaultState(identity, dataIndex, this.columnApi.columns.length));
@@ -523,7 +427,7 @@ export class ContextApi<T = any> {
     } else {
       return rowContext;
     }
-    PblRowContext.fromState(rowContext, this.cache.get(identity));
+    rowContext.fromState(this.cache.get(identity));
 
     return rowContext;
   }

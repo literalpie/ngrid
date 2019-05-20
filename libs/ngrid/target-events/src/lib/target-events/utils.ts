@@ -1,5 +1,9 @@
 import { ViewContainerRef, EmbeddedViewRef } from '@angular/core';
-import { PblNgridMatrixRow } from './events';
+import { PblNgridMatrixRow, PblNgridRowEvent, PblNgridCellEvent } from './events';
+
+export function isCellEvent<T>(event: PblNgridRowEvent<T> | PblNgridCellEvent<T>): event is PblNgridCellEvent<T> {
+  return !!(event as  PblNgridCellEvent<T>).cellTarget;
+}
 
 /**
  * Returns true if the element is a row element (`pbl-ngrid-row`, `cdk-row`).
